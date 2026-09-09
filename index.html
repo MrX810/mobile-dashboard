@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET & BASE ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0d;--bg2:#111111;--bg3:#1a1a1a;
+  --border:#222222;--border-hover:#333333;
+  --text:#ffffff;--text2:#888888;--text3:#555555;
+  --accent:#ef4444;--accent2:#f97316;--green:#22c55e;--blue:#3b82f6;
+  --radius:8px;--gap:12px;
+}
+html{font-family:'Inter',system-ui,sans-serif;font-size:14px;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+body{padding:16px;max-width:1200px;margin:0 auto;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+/* ===== AUTH GATE ===== */
+#auth-gate{display:none;position:fixed;inset:0;background:var(--bg);z-index:1000;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#auth-gate.visible{display:flex}
+#auth-gate h1{font-size:20px;font-weight:600;color:var(--text)}
+#auth-gate p{font-size:13px;color:var(--text2)}
+#auth-gate button{padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+#auth-gate button:hover{opacity:.9}
+#auth-gate .error{color:var(--accent);font-size:12px;display:none}
+/* ===== APP ===== */
+#app{display:none}
+#app.visible{display:block}
+/* ===== STATUS BAR ===== */
+.status-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.status-dot{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:4px 10px}
+.status-dot .dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.status-dot .dot.on{background:var(--green)}
+.status-dot .dot.err{background:var(--accent)}
+/* ===== GRID ===== */
+.grid{display:grid;gap:var(--gap);margin-bottom:20px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+@media(max-width:640px){.g2,.g3,.g4{grid-template-columns:1fr 1fr}}
+/* ===== CARDS ===== */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .15s}
+.card:hover{border-color:var(--border-hover)}
+.card-label{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.card-value{font-size:24px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.card-sub{font-size:12px;color:var(--text2);margin-top:4px}
+/* ===== PROGRESS BAR ===== */
+.progress{width:100%;height:4px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;background:var(--text3);transition:width .3s}
+.progress-fill.warn{background:var(--accent2)}
+.progress-fill.danger{background:var(--accent)}
+/* ===== SECTION TITLE ===== */
+.section-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
+/* ===== STAT CARDS ROW ===== */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-bottom:20px}
+@media(max-width:640px){.stat-row{grid-template-columns:1fr 1fr}}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.stat-card .label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.stat-card .value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-card .sub{font-size:12px;color:var(--text2);margin-top:2px}
+/* ===== FILTER BAR ===== */
+.filter-bar{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-btn{padding:6px 12px;font-size:12px;font-weight:500;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-family:inherit;transition:all .15s}
+.filter-btn:hover{border-color:var(--border-hover);color:var(--text)}
+.filter-btn.active{background:var(--bg3);color:var(--text);border-color:var(--border-hover)}
+/* ===== HEATMAP ===== */
+.heatmap-container{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.heatmap-grid{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
+.heatmap-cell{width:12px;height:12px;border-radius:2px;background:var(--bg)}
+.heatmap-cell.l1{background:rgba(239,68,68,.15)}
+.heatmap-cell.l2{background:rgba(239,68,68,.3)}
+.heatmap-cell.l3{background:rgba(239,68,68,.5)}
+.heatmap-cell.l4{background:rgba(239,68,68,.7)}
+.heatmap-cell.l5{background:var(--accent)}
+.heatmap-labels{display:flex;justify-content:space-between;margin-top:8px}
+.heatmap-labels span{font-size:10px;color:var(--text3)}
+/* ===== WEEKLY HEATMAP ===== */
+.weekly-row{display:flex;gap:6px;justify-content:center;margin:12px 0}
+.weekly-cell{display:flex;flex-direction:column;align-items:center;gap:4px}
+.weekly-cell .bar{width:32px;height:32px;border-radius:4px;background:var(--bg)}
+.weekly-cell .bar.l1{background:rgba(239,68,68,.15)}
+.weekly-cell .bar.l2{background:rgba(239,68,68,.3)}
+.weekly-cell .bar.l3{background:rgba(239,68,68,.5)}
+.weekly-cell .bar.l4{background:rgba(239,68,68,.7)}
+.weekly-cell .bar.l5{background:var(--accent)}
+.weekly-cell span{font-size:10px;color:var(--text3)}
+/* ===== ACTIVE DAY ===== */
+.active-day{display:flex;align-items:center;gap:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.active-day .ad-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.active-day .ad-value{font-size:20px;font-weight:700}
+.active-day .ad-sub{font-size:12px;color:var(--text2)}
+/* ===== TABLE ===== */
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px}
+.table-wrap table{width:100%;border-collapse:collapse}
+.table-wrap th{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:10px 16px;border-bottom:1px solid var(--border)}
+.table-wrap td{font-size:13px;padding:10px 16px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+.table-wrap tr:last-child td{border-bottom:none}
+.table-wrap tr:hover td{background:var(--bg3)}
+.table-wrap .num{text-align:right}
+.table-wrap .share-bar{width:60px;height:4px;background:var(--bg);border-radius:2px;display:inline-block;vertical-align:middle;margin-left:6px}
+.table-wrap .share-fill{height:100%;background:var(--accent);border-radius:2px;display:block}
+/* ===== LAST UPDATE ===== */
+.last-update{text-align:center;font-size:11px;color:var(--text3);margin-top:8px;padding-bottom:8px}
+/* ===== LOGIN SCREEN ===== */
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.login-screen.hidden{display:none}
+.login-screen h1{font-size:18px;font-weight:600}
+.login-screen p{font-size:13px;color:var(--text2)}
+.login-screen .btn-discord{display:flex;align-items:center;gap:8px;padding:10px 20px;background:#5865F2;color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.login-screen .btn-discord:hover{opacity:.85}
+.login-screen .btn-discord svg{width:20px;height:20px}
+.login-screen .err{color:var(--accent);font-size:12px;display:none;margin-top:4px}
+/* ===== SPARKLINE ===== */
+.sparkline{margin-top:8px;height:24px}
+.sparkline svg{width:100%;height:100%}
+.sparkline polyline{fill:none;stroke:var(--text3);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-screen" id="login">
+  <h1>DASHBOARD</h1>
+  <p>Zugang nur mit Discord-Autorisierung.</p>
+  <button class="btn-discord" onclick="loginDiscord()">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+    Mit Discord anmelden
+  </button>
+  <div class="err" id="login-err"></div>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+<!-- Status Bar -->
+<div class="status-bar" id="status-bar"></div>
+
+<!-- Mac Stats -->
+<div class="section-title">SYSTEM</div>
+<div class="grid g2" id="mac-stats"></div>
+
+<!-- Battery (stationary) -->
+<div style="margin-bottom:20px">
+  <div class="section-title">BATTERIE</div>
+  <div class="card" id="battery-card"></div>
+</div>
+
+<!-- Hermes -->
+<div class="section-title">HERMES / AECH</div>
+<div class="grid g2" id="hermes-stats"></div>
+
+<!-- OpenRouter Stats -->
+<div class="section-title">OPENROUTER</div>
+<div class="filter-bar" id="filter-bar"></div>
+<div class="stat-row" id="or-stats"></div>
+
+<!-- Heatmap -->
+<div class="heatmap-container" id="heatmap-section"></div>
+
+<!-- Active Day + Weekly -->
+<div class="grid g2" id="active-weekly"></div>
+
+<!-- Model Breakdown -->
+<div style="margin-top:20px">
+  <div class="section-title">MODELLAUFSCHLÜSSELUNG</div>
+  <div class="table-wrap" id="model-table"></div>
+</div>
+
+<div class="last-update" id="last-update"></div>
+
+</div><!-- /app -->
+
+<!-- Supabase CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ===== CONFIG =====
+const SUPABASE_URL = 'https://wybvupbjjdmefhoujdcy.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5YnZ1cGJqamRtZWZob3VqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5NTk3ODIsImV4cCI6MjEwNDUzNTc4Mn0.kpbxacELWAt1SBr_9yQGa-3DOBsXfuYVEgG51GwVXjI';
+const ALLOWED_DISCORD_IDS = ['1282332318576541737']; // Parzival
+const REFRESH_MS = 60000;
+
+let supabase, currentUser, statsCache = null;
+let activeRange = '30d';
+
+// ===== AUTH =====
+async function initAuth() {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    const uid = session.user.user_metadata?.provider_id || session.user.id;
+    if (ALLOWED_DISCORD_IDS.includes(uid)) {
+      currentUser = session.user;
+      showApp();
+      return;
+    }
+  }
+  // Listen for OAuth callback
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      const uid = session.user.user_metadata?.provider_id || session.user.id;
+      if (ALLOWED_DISCORD_IDS.includes(uid)) {
+        currentUser = session.user;
+        showApp();
+      } else {
+        document.getElementById('login-err').textContent = 'Kein Zugriff.';
+        document.getElementById('login-err').style.display = 'block';
+        supabase.auth.signOut();
+      }
+    }
+  });
+}
+
+function loginDiscord() {
+  supabase.auth.signInWithOAuth({
+    provider: 'discord',
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+}
+
+function showApp() {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  loadStats();
+  setInterval(loadStats, REFRESH_MS);
+}
+
+// ===== DATA FETCH =====
+async function loadStats() {
+  try {
+    const { data, error } = await supabase
+      .from('dashboard_stats')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (error) throw error;
+    statsCache = data;
+    renderAll(data);
+  } catch (e) {
+    console.error('Fetch error:', e);
+  }
+}
+
+// ===== RENDERERS =====
+function renderAll(d) {
+  renderStatusBar(d);
+  renderMacStats(d);
+  renderBattery(d);
+  renderHermes(d);
+  renderFilterBar();
+  renderORStats(d);
+  renderHeatmap(d);
+  renderActiveWeekly(d);
+  renderModelTable(d);
+  renderLastUpdate(d);
+}
+
+function renderStatusBar(d) {
+  const items = [
+    { label: 'Mac', on: d.mac_online },
+    { label: 'Hermes', on: d.hermes_online },
+    { label: 'OpenRouter', on: d.openrouter_online }
+  ];
+  document.getElementById('status-bar').innerHTML = items.map(i =>
+    `<div class="status-dot"><span class="dot ${i.on ? 'on' : 'err'}"></span>${i.label}</div>`
+  ).join('');
+}
+
+function renderMacStats(d) {
+  const cpuPct = d.cpu_percent || 0;
+  const memPct = d.mem_total ? Math.round(d.mem_used / d.mem_total * 100) : 0;
+  const diskPct = d.disk_total ? Math.round(d.disk_used / d.disk_total * 100) : 0;
+  document.getElementById('mac-stats').innerHTML = `
+    <div class="card">
+      <div class="card-label">CPU</div>
+      <div class="card-value">${cpuPct}%</div>
+      <div class="card-sub">${d.cpu_cores || '?'} Kerne · ${d.cpu_freq || '?'} GHz</div>
+      <div class="sparkline">${sparkline(d.cpu_history || [])}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">RAM</div>
+      <div class="card-value">${formatGB(d.mem_used)} / ${formatGB(d.mem_total)}</div>
+      <div class="progress"><div class="progress-fill ${memPct > 90 ? 'danger' : memPct > 70 ? 'warn' : ''}" style="width:${memPct}%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">FESTPLATTE</div>
+      <div class="card-value">${formatGB(d.disk_used)} / ${formatGB(d.disk_total)}</div>
+      <div class="progress"><div class="progress-fill ${diskPct > 90 ? 'danger' : diskPct > 70 ? 'warn' : ''}" style="width:${diskPct}%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">UPTIME</div>
+      <div class="card-value">${d.uptime || '--'}</div>
+      <div class="card-sub">Seit: ${d.boot_time || '?'}</div>
+    </div>
+  `;
+}
+
+function renderBattery(d) {
+  const pct = d.battery_percent;
+  const charging = d.battery_charging;
+  document.getElementById('battery-card').innerHTML = `
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="font-size:28px">${charging ? '&#9889;' : '&#128267;'}</div>
+      <div>
+        <div class="card-label">BATTERIE</div>
+        <div class="card-value">${pct != null ? pct + '%' : 'N/A'}</div>
+        <div class="card-sub">${charging ? 'Wird geladen' : 'Auf Batterie'}</div>
+      </div>
+      ${pct != null ? `<div style="flex:1"><div class="progress"><div class="progress-fill ${pct < 20 ? 'danger' : pct < 40 ? 'warn' : ''}" style="width:${pct}%"></div></div></div>` : ''}
+    </div>
+  `;
+}
+
+function renderHermes(d) {
+  document.getElementById('hermes-stats').innerHTML = `
+    <div class="card">
+      <div class="card-label">GATEWAY</div>
+      <div class="card-value" style="font-size:16px;color:${d.hermes_online ? 'var(--green)' : 'var(--accent)'}">${d.hermes_online ? 'Online' : 'Offline'}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">MODELL</div>
+      <div class="card-value" style="font-size:16px">${d.hermes_model || '?'}</div>
+      <div class="card-sub">via OpenRouter</div>
+    </div>
+  `;
+}
+
+function renderFilterBar() {
+  const ranges = [
+    { key: '7d', label: '7T' },
+    { key: '30d', label: '30T' },
+    { key: '90d', label: '90T' },
+    { key: 'ytd', label: 'YTD' },
+    { key: 'all', label: 'Alle' },
+    { key: 'custom', label: 'Benutzerdefiniert' }
+  ];
+  document.getElementById('filter-bar').innerHTML = ranges.map(r =>
+    `<button class="filter-btn ${r.key === activeRange ? 'active' : ''}" onclick="setRange('${r.key}')">${r.label}</button>`
+  ).join('');
+}
+
+function setRange(key) {
+  activeRange = key;
+  renderFilterBar();
+  if (statsCache) renderORStats(statsCache);
+}
+
+function renderORStats(d) {
+  const s = d.or_stats || {};
+  document.getElementById('or-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="label">TOKENS GESAMT</div>
+      <div class="value">${formatTokens(s.total_tokens)}</div>
+      <div class="sub">${(s.total_requests || 0).toLocaleString('de-DE')} Anfragen</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">INPUT-TOKENS</div>
+      <div class="value">${formatTokens(s.input_tokens)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">OUTPUT-TOKENS</div>
+      <div class="value">${formatTokens(s.output_tokens)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">GESCHATZTE KOSTEN</div>
+      <div class="value">$${(s.cost || 0).toFixed(2)}</div>
+    </div>
+  `;
+}
+
+function renderHeatmap(d) {
+  const days = d.heatmap || [];
+  const months = ['Sep','Okt','Nov','Dez','Jan','Feb','Mar','Apr','Mai','Jun','Jul','Aug','Sep'];
+  const maxTokens = Math.max(...days.map(d => d.tokens || 0), 1);
+  let html = '<div class="section-title">ÜBERSICHT</div>';
+  html += '<div class="heatmap-labels"><span>Weniger</span><span>Mehr</span></div>';
+  html += '<div style="display:flex;gap:2px;justify-content:center;margin-top:6px">';
+  days.forEach(day => {
+    const pct = (day.tokens || 0) / maxTokens;
+    const lvl = pct === 0 ? '' : pct < .2 ? 'l1' : pct < .4 ? 'l2' : pct < .6 ? 'l3' : pct < .8 ? 'l4' : 'l5';
+    html += `<div class="heatmap-cell ${lvl}" title="${day.date}: ${formatTokens(day.tokens)}"></div>`;
+  });
+  html += '</div>';
+  // Month labels
+  html += '<div style="display:flex;gap:2px;justify-content:center;margin-top:4px">';
+  months.forEach((m, i) => {
+    html += `<span style="width:calc(100%/13);text-align:center;font-size:10px;color:var(--text3)">${m}</span>`;
+  });
+  html += '</div>';
+  document.getElementById('heatmap-section').innerHTML = html;
+}
+
+function renderActiveWeekly(d) {
+  const ad = d.active_day || {};
+  const week = d.weekly || {};
+  const days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const weekVals = [week.mon, week.tue, week.wed, week.thu, week.fri, week.sat, week.sun].map(v => v || 0);
+  const maxW = Math.max(...weekVals, 1);
+
+  let weeklyHtml = '<div class="section-title">WÖCHENTLICH</div><div class="weekly-row">';
+  weekVals.forEach((v, i) => {
+    const pct = v / maxW;
+    const lvl = pct === 0 ? '' : pct < .2 ? 'l1' : pct < .4 ? 'l2' : pct < .6 ? 'l3' : pct < .8 ? 'l4' : 'l5';
+    weeklyHtml += `<div class="weekly-cell"><div class="bar ${lvl}" title="${formatTokens(v)}"></div><span>${days[i]}</span></div>`;
+  });
+  weeklyHtml += '</div>';
+
+  document.getElementById('active-weekly').innerHTML = `
+    <div class="card">
+      <div class="card-label">AKTIVSTER TAG</div>
+      <div class="card-value" style="font-size:18px">${ad.day || '?'}</div>
+      <div class="card-sub">${ad.date || '?'} · ${formatTokens(ad.tokens)}</div>
+    </div>
+    <div class="card">${weeklyHtml}</div>
+  `;
+}
+
+function renderModelTable(d) {
+  const models = d.models || [];
+  if (!models.length) {
+    document.getElementById('model-table').innerHTML = '<div style="padding:16px;color:var(--text3);font-size:13px">Keine Daten</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>Modell</th><th class="num">Anfragen</th><th class="num">Eingabe</th><th class="num">Ausgabe</th><th class="num">Kosten</th><th class="num">Anteil</th></tr></thead><tbody>';
+  models.forEach(m => {
+    html += `<tr>
+      <td>${m.name}</td>
+      <td class="num">${(m.requests || 0).toLocaleString('de-DE')}</td>
+      <td class="num">${formatTokens(m.input)}</td>
+      <td class="num">${formatTokens(m.output)}</td>
+      <td class="num">$${(m.cost || 0).toFixed(2)}</td>
+      <td class="num">${(m.share || 0).toFixed(1)}%<span class="share-bar"><span class="share-fill" style="width:${m.share || 0}%"></span></span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('model-table').innerHTML = html;
+}
+
+function renderLastUpdate(d) {
+  const t = d.updated_at ? new Date(d.updated_at).toLocaleTimeString('de-DE') : '--:--';
+  document.getElementById('last-update').textContent = `Aktualisiert: ${t}`;
+}
+
+// ===== HELPERS =====
+function formatGB(mb) {
+  if (mb == null) return '--';
+  return (mb / 1024).toFixed(1) + ' GB';
+}
+function formatTokens(n) {
+  if (n == null) return '0';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toLocaleString('de-DE');
+}
+function sparkline(data) {
+  if (!data.length) return '';
+  const w = 200, h = 24, max = Math.max(...data, 1);
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}"><polyline points="${pts}"/></svg>`;
+}
+
+// ===== INIT =====
+initAuth();
+</script>
+</body>
+</html>
