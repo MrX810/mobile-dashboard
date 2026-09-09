@@ -42,8 +42,10 @@ cat > "$PLIST_PATH" << PLIST
         <string>${SUPABASE_URL}</string>
         <key>SUPABASE_SERVICE_KEY</key>
         <string>${SUPABASE_SERVICE_KEY}</string>
-        <key>OPENROUTER_API_KEY</key>
-        <string>${OPENROUTER_API_KEY}</string>
+        <key>OMNIROUTE_URL</key>
+        <string>${OMNIROUTE_URL:-http://localhost:20128}</string>
+        <key>OMNIROUTE_PASSWORD</key>
+        <string>${OMNIROUTE_PASSWORD:-CHANGEME}</string>
     </dict>
     <key>WorkingDirectory</key>
     <string>${SCRIPT_DIR}</string>

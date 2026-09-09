@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Dashboard Backend — sammelt Mac, Hermes und OpenRouter Stats
+Dashboard Backend — sammelt Mac, Hermes und OmniRoute Stats
 und pusht jede Minute zu Supabase.
 """
-import os, sys, json, subprocess, time, datetime, urllib.request, urllib.error
+import os, sys, json, subprocess, time, datetime, urllib.request, urllib.error, http.cookiejar
 from pathlib import Path
 
 # ===== CONFIG =====
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://YOUR_PROJECT.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "YOUR_SERVICE_KEY")
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OMNIROUTE_URL = os.environ.get("OMNIROUTE_URL", "http://localhost:20128")
+OMNIROUTE_PASSWORD = os.environ.get("OMNIROUTE_PASSWORD", "")
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
@@ -20,17 +21,13 @@ def get_mac_stats():
 
     # CPU
     try:
-        out = subprocess.check_output(
-            ["sysctl", "-n", "hw.ncpu"], text=True
-        ).strip()
+        out = subprocess.check_output(["sysctl", "-n", "hw.ncpu"], text=True).strip()
         stats["cpu_cores"] = int(out)
     except Exception:
         stats["cpu_cores"] = 8
 
     try:
-        out = subprocess.check_output(
-            ["sysctl", "-n", "hw.cpufrequency"], text=True
-        ).strip()
+        out = subprocess.check_output(["sysctl", "-n", "hw.cpufrequency"], text=True).strip()
         stats["cpu_freq"] = f"{int(out) / 1e9:.1f}"
     except Exception:
         stats["cpu_freq"] = "?"
@@ -38,10 +35,8 @@ def get_mac_stats():
     # CPU Usage (top snapshot)
     try:
         out = subprocess.check_output(
-            ["sh", "-c", "top -l 1 -n 0 | grep 'CPU usage'"],
-            text=True
+            ["sh", "-c", "top -l 1 -n 0 | grep 'CPU usage'"], text=True
         ).strip()
-        # "CPU usage: 12.34% user, 5.67% sys, 81.99% idle"
         parts = out.split()
         user_pct = float(parts[2].rstrip("%"))
         sys_pct = float(parts[4].rstrip("%"))
@@ -63,7 +58,7 @@ def get_mac_stats():
     # RAM
     try:
         out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
-        stats["mem_total"] = int(out) // (1024 * 1024)  # MB
+        stats["mem_total"] = int(out) // (1024 * 1024)
     except Exception:
         stats["mem_total"] = 0
 
@@ -79,7 +74,7 @@ def get_mac_stats():
         inactive = parse_vm_stat("Pages inactive:")
         wired = parse_vm_stat("Pages wired down:")
         stats["mem_used"] = (active + wired + inactive) // (1024 * 1024)
-    except Exception as e:
+    except Exception:
         stats["mem_used"] = 0
 
     # Disk
@@ -88,7 +83,7 @@ def get_mac_stats():
         parts = out.strip().split("\n")[1].split()
         total_kb = int(parts[1])
         used_kb = int(parts[2])
-        stats["disk_total"] = total_kb // 1024  # MB
+        stats["disk_total"] = total_kb // 1024
         stats["disk_used"] = used_kb // 1024
     except Exception:
         stats["disk_total"] = 0
@@ -97,7 +92,6 @@ def get_mac_stats():
     # Uptime
     try:
         out = subprocess.check_output(["uptime"], text=True).strip()
-        # Parse "up 3 days, 14:22"
         up_idx = out.index("up ") + 3
         up_part = out[up_idx:out.index(",", up_idx) if "," in out[up_idx:] else None]
         stats["uptime"] = up_part.strip()
@@ -106,24 +100,16 @@ def get_mac_stats():
 
     # Boot time
     try:
-        out = subprocess.check_output(
-            ["sysctl", "-n", "kern.boottime"], text=True
-        ).strip()
-        # { sec = 1234567890, usec = 0 } Mon Sep  5 10:30:00 2024
+        out = subprocess.check_output(["sysctl", "-n", "kern.boottime"], text=True).strip()
         import re
         match = re.search(r"(\w+ \w+ \d+ \d+:\d+:\d+ \d+)", out)
-        if match:
-            stats["boot_time"] = match.group(1)
-        else:
-            stats["boot_time"] = "?"
+        stats["boot_time"] = match.group(1) if match else "?"
     except Exception:
         stats["boot_time"] = "?"
 
     # Battery (stationary Mac — may not have one)
     try:
-        out = subprocess.check_output(
-            ["pmset", "-g", "batt"], text=True
-        )
+        out = subprocess.check_output(["pmset", "-g", "batt"], text=True)
         if "Battery" in out:
             import re
             pct_match = re.search(r"(\d+)%", out)
@@ -131,7 +117,7 @@ def get_mac_stats():
             stats["battery_charging"] = "charging" in out.lower() or "AC attached" in out
         else:
             stats["battery_percent"] = None
-            stats["battery_charging"] = True  # stationary = plugged in
+            stats["battery_charging"] = True
     except Exception:
         stats["battery_percent"] = None
         stats["battery_charging"] = True
@@ -146,17 +132,12 @@ def get_hermes_stats():
         "hermes_online": False,
         "hermes_model": "?"
     }
-
-    # Check gateway process
     try:
-        out = subprocess.check_output(
-            ["pgrep", "-f", "hermes"], text=True
-        ).strip()
+        out = subprocess.check_output(["pgrep", "-f", "hermes"], text=True).strip()
         stats["hermes_online"] = len(out) > 0
     except Exception:
         stats["hermes_online"] = False
 
-    # Try to read config for model
     try:
         config_path = Path.home() / ".hermes" / "config.yaml"
         if config_path.exists():
@@ -171,9 +152,24 @@ def get_hermes_stats():
     return stats
 
 
-# ===== OPENROUTER STATS =====
-def get_openrouter_stats():
-    """Holt Token-Stats von der OpenRouter API."""
+# ===== OMNIROUTE STATS =====
+def omniroute_login():
+    """Login to OmniRoute management API, returns cookie jar."""
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    login_data = json.dumps({"password": OMNIROUTE_PASSWORD}).encode()
+    req = urllib.request.Request(
+        f"{OMNIROUTE_URL}/api/auth/login",
+        data=login_data,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+    opener.open(req, timeout=10)
+    return cookie_jar, opener
+
+
+def get_omniroute_stats():
+    """Holt Token-Stats von der OmniRoute API."""
     stats = {
         "total_tokens": 0,
         "input_tokens": 0,
@@ -184,96 +180,75 @@ def get_openrouter_stats():
         "heatmap": [],
         "active_day": {},
         "weekly": {},
-        "openrouter_online": False
+        "omniroute_online": False
     }
 
-    if not OPENROUTER_KEY:
+    if not OMNIROUTE_PASSWORD:
+        print("No OMNIROUTE_PASSWORD set — skipping", file=sys.stderr)
         return stats
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    # Activity / Usage
     try:
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/activity",
-            headers=headers
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            stats["openrouter_online"] = True
-            # Parse based on OpenRouter response format
-            if "data" in data:
-                d = data["data"]
-                stats["total_tokens"] = d.get("total_tokens", 0)
-                stats["input_tokens"] = d.get("input_tokens", 0)
-                stats["output_tokens"] = d.get("output_tokens", 0)
-                stats["total_requests"] = d.get("total_requests", 0)
-                stats["cost"] = d.get("cost", 0.0)
-    except Exception as e:
-        print(f"OpenRouter activity error: {e}", file=sys.stderr)
+        cookie_jar, opener = omniroute_login()
 
-    # Models breakdown
-    try:
+        # Analytics (full history)
         req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/activity/models",
-            headers=headers
+            f"{OMNIROUTE_URL}/api/usage/analytics?range=all",
+            headers={"Accept": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with opener.open(req, timeout=15) as resp:
             data = json.loads(resp.read())
-            if "data" in data:
-                total = sum(m.get("total_tokens", 0) for m in data["data"])
-                stats["models"] = [
-                    {
-                        "name": m.get("model", "?"),
-                        "requests": m.get("requests", 0),
-                        "input": m.get("input_tokens", 0),
-                        "output": m.get("output_tokens", 0),
-                        "cost": m.get("cost", 0.0),
-                        "share": round(m.get("total_tokens", 0) / total * 100, 1) if total > 0 else 0
-                    }
-                    for m in data["data"]
-                ]
-    except Exception as e:
-        print(f"OpenRouter models error: {e}", file=sys.stderr)
+            stats["omniroute_online"] = True
 
-    # Heatmap (365 days)
-    try:
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/activity/heatmap",
-            headers=headers
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            if "data" in data:
-                stats["heatmap"] = [
-                    {"date": d.get("date"), "tokens": d.get("tokens", 0)}
-                    for d in data["data"]
-                ]
-    except Exception as e:
-        print(f"OpenRouter heatmap error: {e}", file=sys.stderr)
+            summary = data.get("summary", {})
+            stats["total_tokens"] = summary.get("totalTokens", 0)
+            stats["input_tokens"] = summary.get("promptTokens", 0)
+            stats["output_tokens"] = summary.get("completionTokens", 0)
+            stats["total_requests"] = summary.get("totalRequests", 0)
+            stats["cost"] = summary.get("totalCost", 0.0)
 
-    # Active day + weekly
-    try:
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/activity/stats",
-            headers=headers
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            if "data" in data:
-                d = data["data"]
-                ad = d.get("active_day", {})
+            # Daily trend (for heatmap + weekly)
+            daily = data.get("dailyTrend", [])
+            activity_map = data.get("activityMap", {})
+
+            # Heatmap from activityMap
+            stats["heatmap"] = [
+                {"date": date, "tokens": tokens}
+                for date, tokens in activity_map.items()
+            ]
+
+            # Find most active day
+            if daily:
+                max_day = max(daily, key=lambda x: x.get("totalTokens", 0))
+                import calendar
+                dt = datetime.datetime.strptime(max_day["date"], "%Y-%m-%d")
                 stats["active_day"] = {
-                    "day": ad.get("day", "?"),
-                    "date": ad.get("date", "?"),
-                    "tokens": ad.get("tokens", 0)
+                    "day": calendar.day_name[dt.weekday()],
+                    "date": max_day["date"],
+                    "tokens": max_day.get("totalTokens", 0)
                 }
-                stats["weekly"] = d.get("weekly", {})
+                # Weekly heatmap (last 7 days)
+                for d in daily[-7:]:
+                    dt = datetime.datetime.strptime(d["date"], "%Y-%m-%d")
+                    stats["weekly"][calendar.day_abbr[dt.weekday()]] = d.get("totalTokens", 0)
+
+            # Model breakdown
+            models = data.get("byModel", [])
+            total_model_tokens = sum(m.get("totalTokens", 0) for m in models)
+            stats["models"] = [
+                {
+                    "name": m.get("model", "?"),
+                    "provider": m.get("provider", "?"),
+                    "requests": m.get("requests", 0),
+                    "input": m.get("promptTokens", 0),
+                    "output": m.get("completionTokens", 0),
+                    "cost": m.get("cost", 0),
+                    "share": round(m.get("totalTokens", 0) / total_model_tokens * 100, 1) if total_model_tokens > 0 else 0
+                }
+                for m in models
+            ]
+
     except Exception as e:
-        print(f"OpenRouter stats error: {e}", file=sys.stderr)
+        print(f"OmniRoute error: {e}", file=sys.stderr)
 
     return stats
 
@@ -287,7 +262,6 @@ def push_to_supabase(all_stats):
         **all_stats
     }).encode()
 
-    # Get existing record to upsert
     req = urllib.request.Request(
         f"{SUPABASE_URL}/rest/v1/dashboard_stats?id=eq.1",
         data=payload,
@@ -306,7 +280,6 @@ def push_to_supabase(all_stats):
             else:
                 print(f"Supabase response: {resp.status}", file=sys.stderr)
     except urllib.error.HTTPError as e:
-        # If no record exists, insert instead
         if e.code == 404:
             req2 = urllib.request.Request(
                 f"{SUPABASE_URL}/rest/v1/dashboard_stats",
@@ -333,11 +306,11 @@ def main():
         try:
             mac = get_mac_stats()
             hermes = get_hermes_stats()
-            or_stats = get_openrouter_stats()
+            omni = get_omniroute_stats()
 
-            all_stats = {**mac, **hermes, **or_stats}
+            all_stats = {**mac, **hermes, **omni}
 
-            # Also save locally
+            # Save locally
             (DATA_DIR / "stats.json").write_text(json.dumps(all_stats, indent=2))
 
             # Push to Supabase
