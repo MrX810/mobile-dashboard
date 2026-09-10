@@ -188,7 +188,22 @@ let activeRange = '30d';
 
 // ===== AUTH =====
 async function initAuth() {
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { flowType: 'pkce', detectSessionInUrl: true, autoRefreshToken: true }
+  });
+  // OAuth-Callback (PKCE): code aus URL holen und gegen Session tauschen
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('code')) {
+    try {
+      await supabase.auth.exchangeCodeForSession(url.searchParams.get('code'));
+      // Clean URL (ohne code/state)
+      url.searchParams.delete('code');
+      url.searchParams.delete('state');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    } catch (e) {
+      console.error('[auth] exchangeCodeForSession failed:', e);
+    }
+  }
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     const uid = session.user.user_metadata?.provider_id || session.user.id;
@@ -222,7 +237,10 @@ function loginDiscord() {
     console.log('[auth] calling signInWithOAuth with redirect:', redirectTo);
     const result = supabase.auth.signInWithOAuth({
       provider: 'discord',
-      options: { redirectTo: redirectTo }
+      options: {
+        redirectTo: redirectTo,
+        queryParams: { prompt: 'consent' }
+      }
     });
     if (result && typeof result.then === 'function') {
       result.then(({ data, error }) => {
