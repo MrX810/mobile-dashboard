@@ -215,10 +215,22 @@ async function initAuth() {
 }
 
 function loginDiscord() {
-  supabase.auth.signInWithOAuth({
-    provider: 'discord',
-    options: { redirectTo: window.location.origin + window.location.pathname }
-  });
+  try {
+    console.log('[auth] loginDiscord called, supabase:', !!supabase);
+    if (!supabase) { alert('Supabase client not initialized - check console'); return; }
+    const redirectTo = window.location.origin + window.location.pathname;
+    console.log('[auth] calling signInWithOAuth with redirect:', redirectTo);
+    const result = supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: { redirectTo: redirectTo }
+    });
+    if (result && typeof result.then === 'function') {
+      result.then(({ data, error }) => {
+        if (error) { console.error('[auth] signInWithOAuth error:', error); alert('Discord login error: ' + JSON.stringify(error)); }
+        else { console.log('[auth] success, redirecting...'); }
+      }).catch(err => { console.error('[auth] signInWithOAuth exception:', err); alert('Discord login failed: ' + err.message); });
+    }
+  } catch (err) { console.error('[auth] loginDiscord catch:', err); alert('Login error: ' + err.message); }
 }
 
 function showApp() {
@@ -464,7 +476,7 @@ function sparkline(data) {
 }
 
 // ===== INIT =====
-initAuth();
+initAuth().catch(e => { console.error("[auth] initAuth failed:", e); document.getElementById("login").innerHTML += "<p style="color:red;margin-top:1rem">Auth init failed: " + e.message + "</p>"; });
 </script>
 </body>
 </html>
