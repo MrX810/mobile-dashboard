@@ -217,7 +217,7 @@ async function initAuth() {
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' && session) {
       const uid = session.user.user_metadata?.provider_id || session.user.id;
-      if (ALLOWED_DISCORD_IDS.includes(uid)) {
+      if (ALLOWED_IDS.includes(uid)) {
         currentUser = session.user;
         showApp();
       } else {
