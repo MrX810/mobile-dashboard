@@ -476,7 +476,7 @@ function sparkline(data) {
 }
 
 // ===== INIT =====
-initAuth().catch(e => { console.error("[auth] initAuth failed:", e); document.getElementById("login").innerHTML += "<p style="color:red;margin-top:1rem">Auth init failed: " + e.message + "</p>"; });
+initAuth().catch(e => { console.error("[auth] initAuth failed:", e); });
 </script>
 </body>
 </html>
